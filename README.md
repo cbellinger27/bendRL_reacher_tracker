@@ -5,6 +5,7 @@ In this work, we evaluate the ability to learn image-based reaching and tracking
 
 ## Objective
 
+This work explores the potential of on- and off-policy reinforcement learning algorithms to perform image-based reaching and tracking tasks. In order to guage performance in a realistic manner, the physical training environment contains variable light conditions and numerous objects and colours that may distract the agent. All training is performed end-to-end and online. 
 
 ## Installation
 
