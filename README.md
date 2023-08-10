@@ -12,3 +12,9 @@ This work explores the potential of on- and off-policy reinforcement learning al
 
 ## Reproducibility 
 
+
+## Results
+
+The plots below show the learning curves for the DQN and PPO agents. PPO learns to achieve a much higher mean reward than DQN in the first 40k time steps. After an additional 20k of training steps DQN approachs PPO on reacher and tracker but remains significantly worse on the static reacher task.
+
+![plot](figures/paper_learning_curves.png)
