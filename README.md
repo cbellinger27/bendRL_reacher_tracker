@@ -18,7 +18,7 @@ To control the robot and send it commands, you must install ur_rtde, for which t
 sudo apt-get install libboost-all-dev
 pip install pybind11
 ``` 
-Then, use the following instructions, which you can also find here: https://sdurobotics.gitlab.io/ur_rtde/installation/installation.html 
+Next, following instructions available here: https://sdurobotics.gitlab.io/ur_rtde/installation/installation.html 
 
 Optionally if you want to use ur_rtde with Python make sure pybind11 is checked out from the submodule before attempting to build using:
 
