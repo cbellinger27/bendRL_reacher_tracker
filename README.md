@@ -13,7 +13,7 @@ This work explores the potential of on- and off-policy reinforcement learning al
 ## Installation
 
 ### Dependencies
-To control the robot and send it commands, you must install ur_rtde, for which the dependencies are Boost and Pybind. First make sure to have them installed. You can run 
+To control the robot and send it commands, you must install ur_rtde, for which the dependencies are Boost and Pybind. To install the dendencies on Ubuntu Linux run: 
 ```
 sudo apt-get install libboost-all-dev
 pip install pybind11
