@@ -22,12 +22,6 @@ pip install pybind11
 ``` 
 Next, following instructions available here: https://sdurobotics.gitlab.io/ur_rtde/installation/installation.html 
 
-Optionally if you want to use ur_rtde with Python make sure pybind11 is checked out from the submodule before attempting to build using:
-
-```
-git submodule update --init --recursive
-```
-
 #### Build
 ```
 git clone https://gitlab.com/sdurobotics/ur_rtde.git
