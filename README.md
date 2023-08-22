@@ -1,4 +1,4 @@
-# bendRL: Visual Reaching and tracking
+# bendRL: Visual Reaching and Tracking
 
 In this work, we evaluate the ability to learn image-based reaching and tracking tasks via reinforcement learning on the UR10e robotic arm by Universal Robots
 
