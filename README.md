@@ -10,6 +10,10 @@ In this work, we evaluate the ability to learn image-based reaching and tracking
 
 This work explores the potential of on- and off-policy reinforcement learning algorithms to perform image-based reaching and tracking tasks. In order to guage performance in a realistic manner, the physical training environment contains variable light conditions and numerous objects and colours that may distract the agent. All training is performed end-to-end and online. 
 
+The training environment with the UR10e robot and the red target on the white monitor background is presented in the image below:
+
+[<img src="figures/IMG_5426.jpg" width="450"/>](figures/IMG_5426.jpg)
+
 ## Installation
 
 These installation instructions were last tested on Ubuntu 22.04 Jammy
@@ -169,6 +173,19 @@ self.HOST = "127.0.0.1"  # the IP address 127.0.0.1 is for URSim, 192.168.0.110 
 
 ## Reproducibility 
 
+To run the sweep of experiments 
+
+with PPO:
+```
+
+python src/hyp_param_sweeps/sweep_trainVisualReacherFiveJointsImageSpace_ppo.py 
+```
+
+with DQN:
+```
+
+python src/hyp_param_sweeps/sweep_trainVisualReacherFiveJointsImageSpace_dqn.py 
+```
 
 ## Results
 

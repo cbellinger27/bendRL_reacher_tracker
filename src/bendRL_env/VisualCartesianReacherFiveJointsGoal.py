@@ -1,3 +1,8 @@
+import sys
+import os
+sys.path.append('../')
+sys.path.append('.')
+
 import gym
 import rtde_receive
 import rtde_control
@@ -9,9 +14,7 @@ import csv
 from src.bendRL_env.targetVisualization import TargetDisplay
 import flycapture2 as fc2
 import cv2
-import sys
 import tkinter
-import os
 
 # install flycap from https://github.com/ethanlarochelle/pyflycapture2
 # https://www.flir.ca/support-center/iis/machine-vision/application-note/understanding-buffer-handling/
@@ -76,7 +79,6 @@ class VisualReacherFiveJoints(gym.Env):
         self.LAST_IMAGE_STATE = None
 
         #UNCOMMENT TO REVERT TO BLACK AND WHITE
-        # self.HOST = "192.168.0.110"  # the IP address 127.0.0.1 is for URSim, 192.168.0.110 for UR10E
         # # CAMERA SETUP
         # self.CAMERA_HOST = "192.168.0.150"
         # self.WIDTH = int(np.round(1600 * 0.25, 0))
@@ -85,6 +87,8 @@ class VisualReacherFiveJoints(gym.Env):
         # self.CAMERA.connect(*self.CAMERA.get_camera_from_index(0))
         # # self.CAMERA.set_format7_configuration(8, 0, 0, image_width, image_height, 4194304)
         # self.CAMERA.start_capture()
+
+        self.HOST = "192.168.0.110"  # the IP address 127.0.0.1 is for URSim, 192.168.0.110 for UR10E
 
         # CAMERA SETUP
         self.CAMERA_HOST = "192.168.0.150"

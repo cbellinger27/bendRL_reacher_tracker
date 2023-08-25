@@ -12,7 +12,7 @@ import cv2
 import sys
 import tkinter
 import os
-from ImageProcessing import ImageProcessing
+from src.bendRL_env.ImageProcessing import ImageProcessing
 
 # install flycap from https://github.com/ethanlarochelle/pyflycapture2
 # https://www.flir.ca/support-center/iis/machine-vision/application-note/understanding-buffer-handling/
