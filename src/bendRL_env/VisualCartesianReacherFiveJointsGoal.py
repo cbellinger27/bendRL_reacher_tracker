@@ -133,7 +133,7 @@ class VisualReacherFiveJoints(gym.Env):
         self.action_space = gym.spaces.Discrete(10)  # clockwise or counterclockwise, for each of the 5 moving joints
         # self.observation_space = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q,
         #                                         shape=(6,), dtype=np.float32)
-        # self.observation_space = gym.spaces.Box(low=0, high=255, shape=(HEIGHT, WIDTH), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(N_CHANNELS, self.HEIGHT, self.WIDTH), dtype=np.uint8)
         # UNCOMMENT TO REVERT TO PRE-OBSERVATION DICTIONARY
         # self.observation_space = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q,
         #                                         shape=(6,), dtype=np.float32)
