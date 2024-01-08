@@ -2,29 +2,30 @@ import sys
 import os
 sys.path.append('../')
 sys.path.append('.')
-
-
+                
 from gym.wrappers import TimeLimit
 from stable_baselines3 import PPO
 from stable_baselines3 import A2C
 from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
+from src.bendRL_env.VisualCartesianReacherFiveJointsGoal import VisualReacherFiveJoints
 import wandb
-from src.bendRL_env.CartesianReacherFiveJointsGoal import CartesianReacherFiveJoints
 from wandb.integration.sb3 import WandbCallback
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, VecTransposeImage
+from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.vec_env import VecFrameStack
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 sweep_configuration = {
-    "project": "BenderFiveJoints",
-    "entity": "nrc-rl-robotics",
+    "project": "ur10e_rl_project",
+    "entity": "rl-team",
     "method": "grid",
     "parameters": {
         "policy_type": {
-            "value": "MlpPolicy"
+            "value": "CnnPolicy",
             },
         "total_timesteps": {
-            "value": 25000,
+            "value": 20000,
             },
         "learning_rate": {
             "value": 0.0001,
@@ -45,16 +46,17 @@ sweep_configuration = {
             "value": 0.9,
             },
         "env_name": {
-            "value":  "BenderFiveJoints",
+            "value":  "VisualBenderFiveJoints",
             },
         "rl_name": {
             "value": "PPO",
+            # "value": DQN,
             },
         "goal_threshold": {
             "value": 0.2,
              },
         "file_name_prefix": {
-            "value": "ppo_threshold_point2",
+            "value": "ppo_visual_threshold_point2",
             },
         "n_steps": {
             "value": 256,
@@ -64,9 +66,12 @@ sweep_configuration = {
             },
         "run": {
             "values": [1, 2, 3]
-            },
+        },
+        "n_stack": {
+            "values": [1],
+        },
         "random_start": {
-            "values": [1, 0]
+            "value": 0,
             }
     }
 }
@@ -84,22 +89,47 @@ def train():
               "_run" + str(run_num) + "_llc_fiveJoints_" + run.id
     os.makedirs(log_dir, exist_ok=True)
 
+    # def make_env():
+    #     env = DummyVecEnv([lambda: Monitor(VisualReacherFiveJoints(random_start=random_start,
+    #                                                         log_state_actions=False,
+    #                                                         goal_threshold=wandb.config.goal_threshold,
+    #                                                         file_name_prefix=wandb.config.file_name_prefix),
+    #                                        log_dir)])
+        
+    #     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=5.)
+    #     print("here-------------------")
+    #     # env = Monitor(env, log_dir)
+    #     stats_path = os.path.join(log_dir,
+    #                               wandb.config.file_name_prefix + "_run" + str(run_num) + "_vec_normalize_" + run.id + ".pkl")
+    #     env.save(stats_path)
+    #     return env
+    
     def make_env():
-        env = DummyVecEnv([lambda: Monitor(CartesianReacherFiveJoints(random_start=random_start,
+        env = DummyVecEnv([lambda: Monitor(VisualReacherFiveJoints(random_start=random_start,
                                                             log_state_actions=False,
                                                             goal_threshold=wandb.config.goal_threshold,
                                                             file_name_prefix=wandb.config.file_name_prefix),
                                            log_dir)])
-        # env = BenderFourJoints(random_start=0, log_state_actions=True)
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=5.)
-        # env = Monitor(env, log_dir)
-        stats_path = os.path.join(log_dir,
-                                  wandb.config.file_name_prefix + "_run" + str(run_num) + "_vec_normalize_" + run.id + ".pkl")
-        env.save(stats_path)
+        if wandb.config.normalize_state == 1:
+            if wandb.config.rl_name == "DQN":
+                env = VecTransposeImage(env)
+            env = VecFrameStack(env, n_stack=wandb.config.n_stack)
+            env = VecNormalize(env, norm_obs=True, norm_reward=True)
+        else:
+            if wandb.config.rl_name == "DQN":
+                env = VecTransposeImage(env)
+            env = VecFrameStack(env, n_stack=wandb.config.n_stack)
+            env = VecNormalize(env, norm_obs=False, norm_reward=True)
+        
+        if wandb.config.save_details == 1:
+            stats_path = os.path.join(log_dir,
+                                    "run" + str(wandb.config.run) + "_vec_normalize_" + run.id + ".pkl")
+            env.save(stats_path)
         return env
-
+    
     env = make_env()
-
+    print(env)
+    
     checkpoint_callback = CheckpointCallback(save_freq=1000, save_path='./logs/',
                                              name_prefix= wandb.config.file_name_prefix + "_run" +
                                                           str(run_num) + '_model_' + run.id)
@@ -134,24 +164,17 @@ def train():
             verbose=2,
         ), checkpoint_callback],
     )
-    # model.save("ppo2_bender")
-    # model.save("a2c_bender")
+
     model.save(wandb.config.file_name_prefix+"_run"+str(run_num)+"_llc_fiveJoints_bender_"+run.id)
     env.close()
 
-
-# def my_train_func():
-#     # read the current value of parameter "a" from wandb.config
-#     wandb.init()
-#     a = wandb.config.a
-#
-#     wandb.log({"a": a, "accuracy": a + 1})
 
 def main():
     sweep_id = wandb.sweep(sweep_configuration)
     print(sweep_id)
     # run the sweep
     wandb.agent(sweep_id, function=train)
+
 
 if __name__ == "__main__":
     main()
