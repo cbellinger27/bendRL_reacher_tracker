@@ -3,7 +3,7 @@ import os
 sys.path.append('../')
 sys.path.append('.')
 
-import gym
+import gymnasium as gym
 import rtde_receive
 import rtde_control
 import dashboard_client
@@ -12,14 +12,14 @@ import numpy as np
 import random
 import csv
 from src.bendRL_env.targetVisualization import TargetDisplay
-import flycapture2 as fc2
+import pyrealsense2 as rs
 import cv2
 import tkinter
 
 # install flycap from https://github.com/ethanlarochelle/pyflycapture2
 # https://www.flir.ca/support-center/iis/machine-vision/application-note/understanding-buffer-handling/
 # sys.path.append("~/git/pyflycapture2")
-sys.path.append("~/repositories/pyflycapture2")
+# sys.path.append("~/repositories/pyflycapture2")
 
 
 #change to 3 for colour image
@@ -27,10 +27,15 @@ N_CHANNELS = 3
 #observation space type: image, image_joint, image_joint_action
 
 class VisualReacherFiveJoints(gym.Env):
+    metadata = {
+        "render_modes": ["None", "human", "rgb_array","red_channel"],
+        "render_fps": 50,
+    }
     def __init__(self, random_start=0, log_state_actions=False, save_images=False, goal_threshold=0.25,
-                 file_name_prefix="default", env_type="static", obs_space_type='image', target_position=[1800, 100]):
+                 file_name_prefix="default", env_type="static", obs_space_type='image', render_mode=None, target_position=[1800, 100]):
         super(VisualReacherFiveJoints, self).__init__()
         self.env_type = env_type
+        self.render_mode = render_mode
         self.obs_space_type = obs_space_type
         self.target_position = target_position
         self.count = 0  # steps
@@ -54,13 +59,12 @@ class VisualReacherFiveJoints(gym.Env):
             os.makedirs("saved_images/" + self.file_name_prefix + "/")
 
         # The goal position
-        self.GOAL_COORD = [-0.3895592448476226, 0.684725084715733, 0.40715734369523193, 1.6313885170972071,
-                           -0.9769981434059597, -1.2117417904968952]
+        self.GOAL_COORD = [4.804408073425293, -0.6207426351359864, 1.1414487997638147, 2.7502738672443847, -0.37228662172426397, -3.3660133520709437]
         self.GOAL_THRESHOLD = goal_threshold
         self.dist_to_goal = None
         self.RANDOM_START = random_start
-        self.FIXED_START = [4.017988204956055, -1.5178674098900338, 2.1686766783343714, -0.8878425520709534,
-                            -0.35228139558901006, 0.16946229338645935]
+        self.FIXED_START = [4.27522611618042, -0.8810612124255677, 1.6479266325580042, 3.17710988103833, -0.20818120638002569, -3.874659601842062]
+
 
         # The possible actions (wrist3 should not move)
         self.BASE_CLOCKWISE = 0
@@ -91,32 +95,50 @@ class VisualReacherFiveJoints(gym.Env):
         self.HOST = "192.168.0.110"  # the IP address 127.0.0.1 is for URSim, 192.168.0.110 for UR10E
 
         # CAMERA SETUP
-        self.CAMERA_HOST = "192.168.0.150"
-        self.WIDTH = int(np.round(1600 * 0.25, 0))
-        self.HEIGHT = int(np.round(1200 * 0.25, 0))
-        self.CAMERA = fc2.Context()
-        self.CAMERA.connect(*self.CAMERA.get_camera_from_index(0))
-        self.CAMERA.set_format7_configuration(fc2.MODE_8, 0, 0, 1600, 1200, fc2.PIXEL_FORMAT_RGB8)
-        # self.CAMERA.set_format7_configuration(8, 0, 0, image_width, image_height, 4194304)
-        self.CAMERA.start_capture()
+        # self.CAMERA_HOST = "192.168.0.150"
+        # self.WIDTH = int(np.round(1600 * 0.25, 0))
+        # self.HEIGHT = int(np.round(1200 * 0.25, 0))
+        # self.CAMERA = fc2.Context()
+        # self.CAMERA.connect(*self.CAMERA.get_camera_from_index(0))
+        # self.CAMERA.set_format7_configuration(fc2.MODE_8, 0, 0, 1600, 1200, fc2.PIXEL_FORMAT_RGB8)
+        # # self.CAMERA.set_format7_configuration(8, 0, 0, image_width, image_height, 4194304)
+        # self.CAMERA.start_capture()
+        # Configure depth and color streams
+
+        self.HEIGHT = 640
+        self.WIDTH = 480
+        self.CAMERA = rs.pipeline()
+        config = rs.config()
+
+        # Get device product line for setting a supporting resolution
+        pipeline_wrapper = rs.pipeline_wrapper(self.CAMERA)
+        pipeline_profile = config.resolve(pipeline_wrapper)
+        device = pipeline_profile.get_device()
+        device_product_line = str(device.get_info(rs.camera_info.product_line))
+
+        config.enable_stream(rs.stream.depth, self.HEIGHT, self.WIDTH, rs.format.z16, 30)
+        config.enable_stream(rs.stream.color, self.HEIGHT, self.WIDTH, rs.format.bgr8, 30)
+
+        # Start streaming
+        self.CAMERA.start(config)
 
         # Joint limits from our robot
         # The ranges are where the robot should keep the motion
-        self.BASE_LOWER_LIMIT_Q = 3.4907
-        self.BASE_UPPER_LIMIT_Q = 4.7997
-        self.RANGE_BASE = (self.BASE_UPPER_LIMIT_Q - self.BASE_LOWER_LIMIT_Q) * 0.1
-        self.SHOULDER_LOWER_LIMIT_Q = -2.3562
+        self.BASE_LOWER_LIMIT_Q = 4.1
+        self.BASE_UPPER_LIMIT_Q = 4.8
+        self.RANGE_BASE = (self.BASE_UPPER_LIMIT_Q - self.BASE_LOWER_LIMIT_Q) * 0.025
+        self.SHOULDER_LOWER_LIMIT_Q = -1.8
         self.SHOULDER_UPPER_LIMIT_Q = -0.6109
-        self.RANGE_SHOULDER = (self.SHOULDER_UPPER_LIMIT_Q - self.SHOULDER_LOWER_LIMIT_Q) * 0.25
-        self.ELBOW_LOWER_LIMIT_Q = 1.0472
-        self.ELBOW_UPPER_LIMIT_Q = 2.7925
-        self.RANGE_ELBOW = (self.ELBOW_UPPER_LIMIT_Q - self.ELBOW_LOWER_LIMIT_Q) * 0.25
-        self.WRIST1_LOWER_LIMIT_Q = -1.2217
-        self.WRIST1_UPPER_LIMIT_Q = 0.0000
-        self.RANGE_WRIST1 = (self.WRIST1_UPPER_LIMIT_Q - self.WRIST1_LOWER_LIMIT_Q) * 0.25
-        self.WRIST2_LOWER_LIMIT_Q = -0.5236
+        self.RANGE_SHOULDER = (self.SHOULDER_UPPER_LIMIT_Q - self.SHOULDER_LOWER_LIMIT_Q) * 0.1
+        self.ELBOW_LOWER_LIMIT_Q = 1.5
+        self.ELBOW_UPPER_LIMIT_Q = 2.0
+        self.RANGE_ELBOW = (self.ELBOW_UPPER_LIMIT_Q - self.ELBOW_LOWER_LIMIT_Q) * 0.1
+        self.WRIST1_LOWER_LIMIT_Q = 1.5
+        self.WRIST1_UPPER_LIMIT_Q = 2.0000
+        self.RANGE_WRIST1 = (self.WRIST1_UPPER_LIMIT_Q - self.WRIST1_LOWER_LIMIT_Q) * 0.1
+        self.WRIST2_LOWER_LIMIT_Q = -0.2
         self.WRIST2_UPPER_LIMIT_Q = 0.3491
-        self.RANGE_WRIST2 = (self.WRIST2_UPPER_LIMIT_Q - self.WRIST2_LOWER_LIMIT_Q) * 0.25
+        self.RANGE_WRIST2 = (self.WRIST2_UPPER_LIMIT_Q - self.WRIST2_LOWER_LIMIT_Q) * 0.1
         self.WRIST3_LOWER_LIMIT_Q = -1.5708
         self.WRIST3_UPPER_LIMIT_Q = 3.1416
 
@@ -133,22 +155,23 @@ class VisualReacherFiveJoints(gym.Env):
         self.action_space = gym.spaces.Discrete(10)  # clockwise or counterclockwise, for each of the 5 moving joints
         # self.observation_space = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q,
         #                                         shape=(6,), dtype=np.float32)
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(N_CHANNELS, self.HEIGHT, self.WIDTH), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=255,
+                                                shape=(self.WIDTH, self.HEIGHT,N_CHANNELS), dtype=np.uint8)
         # UNCOMMENT TO REVERT TO PRE-OBSERVATION DICTIONARY
         # self.observation_space = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q,
         #                                         shape=(6,), dtype=np.float32)
-        spaces = {
-            'image': gym.spaces.Box(low=0, high=255, shape=(N_CHANNELS, self.HEIGHT, self.WIDTH), dtype=np.uint8)
-        }
-        if 'image_joint' in self.obs_space_type:
-            print("to be completed")
-            self.LOWER_LIMIT_Q = np.array([self.BASE_LOWER_LIMIT_Q, self.SHOULDER_LOWER_LIMIT_Q, self.ELBOW_LOWER_LIMIT_Q, self.WRIST1_LOWER_LIMIT_Q, self.WRIST2_LOWER_LIMIT_Q, self.WRIST3_LOWER_LIMIT_Q])
-            self.UPPER_LIMIT_Q = np.array([self.BASE_UPPER_LIMIT_Q, self.SHOULDER_UPPER_LIMIT_Q, self.ELBOW_UPPER_LIMIT_Q, self.WRIST1_UPPER_LIMIT_Q, self.WRIST2_UPPER_LIMIT_Q, self.WRIST3_UPPER_LIMIT_Q])
-            spaces['joint'] = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q, shape=(6,), dtype=np.float32)
-        if self.obs_space_type == 'image_joint_action':
-            spaces['action'] = gym.spaces.Discrete(10)
+        # spaces = {
+        #     'image': gym.spaces.Box(low=0, high=255, shape=(N_CHANNELS, self.HEIGHT, self.WIDTH), dtype=np.uint8)
+        # }
+        # if 'image_joint' in self.obs_space_type:
+        #     print("to be completed")
+        #     self.LOWER_LIMIT_Q = np.array([self.BASE_LOWER_LIMIT_Q, self.SHOULDER_LOWER_LIMIT_Q, self.ELBOW_LOWER_LIMIT_Q, self.WRIST1_LOWER_LIMIT_Q, self.WRIST2_LOWER_LIMIT_Q, self.WRIST3_LOWER_LIMIT_Q])
+        #     self.UPPER_LIMIT_Q = np.array([self.BASE_UPPER_LIMIT_Q, self.SHOULDER_UPPER_LIMIT_Q, self.ELBOW_UPPER_LIMIT_Q, self.WRIST1_UPPER_LIMIT_Q, self.WRIST2_UPPER_LIMIT_Q, self.WRIST3_UPPER_LIMIT_Q])
+        #     spaces['joint'] = gym.spaces.Box(low=self.LOWER_LIMIT_Q, high=self.UPPER_LIMIT_Q, shape=(6,), dtype=np.float32)
+        # if self.obs_space_type == 'image_joint_action':
+        #     spaces['action'] = gym.spaces.Discrete(10)
         
-        self.observation = gym.spaces.Dict(spaces)
+        # self.observation = gym.spaces.Dict(spaces)
 
         time.sleep(1)
         self.reconnect()
@@ -235,7 +258,7 @@ class VisualReacherFiveJoints(gym.Env):
         self.LAST_ACTION = action
         self.LAST_IMAGE_STATE = self.image_state.copy()
 
-        success = self.control.moveJ(new_pos)
+        success = self.control.moveJ(new_pos, speed=0.25, acceleration=0.5)
         while not success:
             if self.receive.isProtectiveStopped():
                 self.reconnect()
@@ -261,11 +284,11 @@ class VisualReacherFiveJoints(gym.Env):
                 self.episode_count += 1
                 self.count = 0
                 # return np.resize(obs.copy(), (HEIGHT, WIDTH, N_CHANNELS)), reward, done, info  # the observation returned is in the joint space
-                return obs, reward, done, info,
+                return obs, reward, done, False, info,
 
             else:
                 self.reconnect()
-                success = self.control.moveJ(new_pos)
+                success = self.control.moveJ(new_pos, speed=0.25, acceleration=0.5)
         self.state = new_pos
 
         # if we are in a tracking environment, we move every time step
@@ -280,11 +303,22 @@ class VisualReacherFiveJoints(gym.Env):
                 # self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
                 # self.image_state = np.resize(self.image_state,
                 #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
-                im = fc2.Image()
-                self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
-                self.image_state = cv2.cvtColor(self.image_state, cv2.COLOR_RGB2BGR)
-                self.image_state = np.resize(self.image_state,
-                                             (N_CHANNELS, self.HEIGHT, self.WIDTH))
+                # im = fc2.Image()
+                # self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
+                # self.image_state = cv2.cvtColor(self.image_state, cv2.COLOR_RGB2BGR)
+                # self.image_state = np.resize(self.image_state,
+                #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
+                
+                # Wait for a coherent pair of frames: depth and color
+                frames = self.CAMERA.wait_for_frames()
+                # depth_frame = frames.get_depth_frame()
+                color_frame = frames.get_color_frame()
+
+                # Convert images to numpy arrays
+                self.image_state = np.asanyarray(color_frame.get_data())
+                # self.image_state = np.resize(self.image_state,
+                #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
+
                 break
             except:
                 print("Oops! Image capture failed (STEP).  Try again...")
@@ -298,14 +332,14 @@ class VisualReacherFiveJoints(gym.Env):
         #  see: install flycap from https://github.com/ethanlarochelle/pyflycapture2
         
         # UNCOMMENT TO REVERT TO PRE-OBSERVATION DICTIONARY
-        # obs = self.image_state.copy()
-        obs = {
-            'image': self.image_state.copy()
-        }
-        if 'image_joint' in self.obs_space_type:
-            obs['joint'] = self.state
-        if self.obs_space_type == 'image_joint_action':
-            obs['action'] = action
+        obs = self.image_state.copy()
+        # obs = {
+        #     'image': self.image_state.copy()
+        # }
+        # if 'image_joint' in self.obs_space_type:
+        #     obs['joint'] = self.state
+        # if self.obs_space_type == 'image_joint_action':
+        #     obs['action'] = action
         
         obs_coord = self.receive.getActualTCPPose()
         # make the distance negative to turn it into a reward
@@ -323,8 +357,9 @@ class VisualReacherFiveJoints(gym.Env):
                 self.log_to_file(action, reward, self.dist_to_goal)
             self.count = 0
             self.episode_count += 1
+            self.render(self.render_mode)
             # return np.resize(obs.copy(), (HEIGHT, WIDTH, N_CHANNELS)), reward, done, info  # the observation returned is in the joint space
-            return obs, reward, done, info
+            return obs, reward, done, False, info
         else:
             reward = -1  # INITIAL APPROACH: Penalizing the time step
             # reward = -self.dist_to_goal # OPTION 1: penalizing distance from goal
@@ -352,7 +387,8 @@ class VisualReacherFiveJoints(gym.Env):
                         str(self.count) + ".jpeg", self.image_state)
         # return np.resize(obs.copy(), (HEIGHT, WIDTH, N_CHANNELS)), reward, done, info  # the observation returned is in the joint space
         # self.render(mode="human")
-        return obs, reward, done, info
+        self.render(self.render_mode)
+        return obs, reward, done, False, info
 
     # Function that writes into file
     def log_to_file(self, action, reward, distance_to_goal, protective_stop=False, joint_stuck=None, type_of_stop=None):
@@ -434,7 +470,7 @@ class VisualReacherFiveJoints(gym.Env):
             # these next two lines have proven to be essential by testing
             self.control.disconnect()
             self.control.reconnect()
-            success = self.control.moveJ(new_pos)
+            success = self.control.moveJ(new_pos, speed=0.25, acceleration=0.5)
             if success:
                 print("move_back successful, will now reset")
                 # return self.receive.getActualQ()
@@ -541,9 +577,9 @@ class VisualReacherFiveJoints(gym.Env):
                 random.uniform(self.WRIST2_LOWER_LIMIT_Q + self.RANGE_WRIST2,
                                self.WRIST2_UPPER_LIMIT_Q - self.RANGE_WRIST2),
                 0.16946229338645935]
-        self.control.moveJ(start_q)
+        self.control.moveJ(start_q, speed=0.25, acceleration=0.5)
 
-    def reset(self):
+    def reset(self, seed=None):
         print("reset has been called")
         self.visualizer.reset(env_type=self.env_type)
         if self.RANDOM_START == 0:
@@ -591,7 +627,7 @@ class VisualReacherFiveJoints(gym.Env):
                                        self.WRIST2_UPPER_LIMIT_Q - self.RANGE_WRIST2),
                         0.16946229338645935]
             self.control.reuploadScript()  # is this necessary ?
-            success = self.control.moveJ(start_q)
+            success = self.control.moveJ(start_q, speed=0.25, acceleration=0.5)
             count += 1
 
         if count == 3:
@@ -618,24 +654,43 @@ class VisualReacherFiveJoints(gym.Env):
                 # self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
                 # self.image_state = np.resize(self.image_state,
                 #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
-                im = fc2.Image()
-                self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
-                self.image_state = cv2.cvtColor(self.image_state, cv2.COLOR_RGB2BGR)
-                self.image_state = np.resize(self.image_state,
-                                             (N_CHANNELS, self.HEIGHT, self.WIDTH))
+                
+                # im = fc2.Image()
+                # self.image_state = cv2.resize(np.array(self.CAMERA.retrieve_buffer(im)), (0, 0), fx=0.25, fy=0.25)
+                # self.image_state = cv2.cvtColor(self.image_state, cv2.COLOR_RGB2BGR)
+                # self.image_state = np.resize(self.image_state,
+                #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
+                
+                # Wait for a coherent pair of frames: depth and color
+                frames = self.CAMERA.wait_for_frames()
+                # depth_frame = frames.get_depth_frame()
+                color_frame = frames.get_color_frame()
+
+                # Convert images to numpy arrays
+                self.image_state = np.asanyarray(color_frame.get_data())
+                # self.image_state = np.resize(self.image_state,
+                #                              (N_CHANNELS, self.HEIGHT, self.WIDTH))
                 loopFlag = False
                 break
             except:
                 print("Oops! Image capture failed (RESET).  Try again...")
             if catchCount == 3 and loopFlag:
                 catchCount = 0
+                # print("disconnecting camera")
+                # self.CAMERA.stop_capture()
+                # self.CAMERA.disconnect()
+                # print("connecting camera")
+                # self.CAMERA.connect(*self.CAMERA.get_camera_from_index(0))
+                # print("Starting capture")
+                # self.CAMERA.start_capture()
+
                 print("disconnecting camera")
-                self.CAMERA.stop_capture()
-                self.CAMERA.disconnect()
+                self.CAMERA.stop()
+                self.CAMERA
                 print("connecting camera")
-                self.CAMERA.connect(*self.CAMERA.get_camera_from_index(0))
                 print("Starting capture")
-                self.CAMERA.start_capture()
+                self.CAMERA.start()
+
             catchCount += 1
 
         # self.image_state = np.array(self.CAMERA.retrieve_buffer(im))
@@ -647,15 +702,15 @@ class VisualReacherFiveJoints(gym.Env):
         # self.render(mode="human")
         self.LAST_IMAGE_STATE = self.image_state
         # UNCOMMENT TO REVERT TO PRE-OBSERVATION DICTIONARY
-        # obs = self.image_state.copy()
-        obs = {
-            'image': self.image_state.copy()
-        }
-        if 'image_joint' in self.obs_space_type:
-            obs['joint'] = self.state
-        if self.obs_space_type == 'image_joint_action':
-            obs['action'] = 0
-        return obs
+        obs = self.image_state.copy()
+        # obs = {
+        #     'image': self.image_state.copy()
+        # }
+        # if 'image_joint' in self.obs_space_type:
+        #     obs['joint'] = self.state
+        # if self.obs_space_type == 'image_joint_action':
+        #     obs['action'] = 0
+        return obs, ""
         # return self.image_state.copy()
 
     def render(self, mode="human"):
@@ -664,14 +719,13 @@ class VisualReacherFiveJoints(gym.Env):
         #     cv2.imshow('frame', self.image_state[-1, :, :])
         #     cv2.waitKey(1000)
         if mode == "human":
-            cv2.imshow('frame', self.image_state)
+            cv2.imshow('UR10e View', self.image_state)
             cv2.waitKey(10)
         elif mode == 'rgb_array':
             return self.image_state
 
     def close(self):
-        self.CAMERA.stop_capture()
-        self.CAMERA.disconnect()
+        self.CAMERA.stop()
         self.control.disconnect()
         self.receive.disconnect()
         self.dashboard.disconnect()

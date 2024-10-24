@@ -6,12 +6,11 @@ import time
 import numpy as np
 import random
 import csv
-import tkinter
-from src.bendRL_env.targetVisualization import TargetDisplay
+
 
 
 class CartesianReacherFiveJoints(gym.Env):
-    def __init__(self, random_start=0, log_state_actions=False, visualize=False, goal_threshold=0.25, host="ur_sim", file_name_prefix="default"):
+    def __init__(self, random_start=0, log_state_actions=False, goal_threshold=0.25, host="ur_sim", file_name_prefix="default"):
         self.count = 0  # steps
         self.episode_count = 0
         self.STEPS_IN_EPISODE = 200
@@ -27,13 +26,11 @@ class CartesianReacherFiveJoints(gym.Env):
             writer.writerow(header)
 
         # The goal position
-        self.GOAL_COORD = [-0.3895592448476226, 0.684725084715733, 0.40715734369523193, 1.6313885170972071,
-                           -0.9769981434059597, -1.2117417904968952]
+        self.GOAL_COORD = [5.006199311887032, -0.8828516763499756, 1.6459363142596644, 3.2727987747862963, -0.6121581610309192, -3.881655756627218]
         self.GOAL_THRESHOLD = goal_threshold # 0.25 is 10 times the initial 0.025 set
         self.dist_to_goal = None
         self.RANDOM_START = random_start
-        self.FIXED_START = [4.017988204956055, -1.5178674098900338, 2.1686766783343714, -0.8878425520709534,
-                            -0.35228139558901006, 0.16946229338645935]
+        self.FIXED_START = [4.27522611618042, -0.8810612124255677, 1.6479266325580042, 3.17710988103833, -0.20818120638002569, -3.874659601842062]
 
         # The possible actions (wrist3 should not move)
         self.BASE_CLOCKWISE = 0
@@ -103,13 +100,8 @@ class CartesianReacherFiveJoints(gym.Env):
         time.sleep(1)
         self.reconnect()
         self.state = None
-        self.visualize = visualize
-        self.root = tkinter.Tk()
         self.target_position = [self.GOAL_COORD[1], self.GOAL_COORD[2]]
-        self.circle_colour = 'red'
-        if self.visualize:
-            self.visualizer = TargetDisplay(self.root, env_type="static", pos=self.target_position,
-                                            circle_colour=self.circle_colour)
+
 
     def step(self, action):
         if self.state is None:
